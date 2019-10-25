@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -17,7 +18,9 @@ import (
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
-func replaceEnv(path string, openconns, idleconns, lifetime int) error {
+var envPath string
+
+func replaceEnv(openconns, idleconns, lifetime int) error {
 	content := fmt.Sprintf(`
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
@@ -29,7 +32,7 @@ MYSQL_MAX_OPEN_CONNECTIONS=%d
 MYSQL_MAX_IDLE_CONNECTIONS=%d
 MYSQL_MAX_LIFETIME_SECONDS=%d
 `, openconns, idleconns, lifetime)
-	err := ioutil.WriteFile(path, []byte(content), 0644)
+	err := ioutil.WriteFile(envPath, []byte(content), 0644)
 	if err != nil {
 		return err
 	}
@@ -45,7 +48,7 @@ func objective(trial goptuna.Trial) (float64, error) {
 	idleconns, _ := trial.SuggestInt("IdleConns", 1, 32)
 	lifetime, _ := trial.SuggestInt("LifetimeSeconds", 1, 32)
 
-	err := replaceEnv("", openconns, idleconns, lifetime)
+	err := replaceEnv(openconns, idleconns, lifetime)
 	if err != nil {
 		return 0, err
 	}
@@ -83,6 +86,9 @@ func objective(trial goptuna.Trial) (float64, error) {
 }
 
 func main() {
+	flag.StringVar(&envPath, "envfile", "/home/isucon/env.sh", "filepath to env")
+	flag.Parse()
+
 	db, err := gorm.Open("sqlite3", "db.sqlite3")
 	if err != nil {
 		log.Fatal("failed to open db:", err)
