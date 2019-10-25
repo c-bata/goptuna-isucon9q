@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -21,6 +22,7 @@ import (
 var envPath string
 
 func replaceEnv(openconns, idleconns, lifetime int) error {
+	_ = os.Remove(envPath)
 	content := fmt.Sprintf(`
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
@@ -89,6 +91,7 @@ func main() {
 	flag.StringVar(&envPath, "envfile", "/home/isucon/env.sh", "filepath to env")
 	flag.Parse()
 
+	_ = os.Remove("db.sqlite3")
 	db, err := gorm.Open("sqlite3", "db.sqlite3")
 	if err != nil {
 		log.Fatal("failed to open db:", err)
