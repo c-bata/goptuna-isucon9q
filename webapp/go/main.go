@@ -319,6 +319,34 @@ func main() {
 	}
 	defer dbx.Close()
 
+	if v := os.Getenv("MYSQL_MAX_OPEN_CONNECTIONS"); v == "" {
+		dbx.SetMaxOpenConns(16)
+	} else {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		dbx.SetMaxOpenConns(c)
+	}
+	if v := os.Getenv("MYSQL_MAX_IDLE_CONNECTIONS"); v == "" {
+		dbx.SetMaxIdleConns(16)
+	} else {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		dbx.SetMaxIdleConns(c)
+	}
+	if v := os.Getenv("MYSQL_MAX_LIFETIME_SECONDS"); v == "" {
+		dbx.SetConnMaxLifetime(24 * time.Second)
+	} else {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		dbx.SetConnMaxLifetime(time.Duration(c) * time.Second)
+	}
+
 	mux := goji.NewMux()
 
 	// API
