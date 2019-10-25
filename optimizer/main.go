@@ -95,6 +95,7 @@ func main() {
 	}
 	defer db.Close()
 	db.DB().SetMaxOpenConns(1)
+	rdb.RunAutoMigrate(db)
 	storage := rdb.NewStorage(db)
 
 	study, err := goptuna.CreateStudy(
