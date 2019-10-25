@@ -12,4 +12,5 @@ webapp/ruby/
 webapp/public/
 venv/
 webapp/sql/initial.sql
+optimizer/optimizer
 
