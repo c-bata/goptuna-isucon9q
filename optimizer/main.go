@@ -59,7 +59,7 @@ func objective(trial goptuna.Trial) (float64, error) {
 		return 0, err
 	}
 
-	cmd := exec.Command("ls")
+	cmd := exec.Command("./bin/benchmarker")
 	stdout := &bytes.Buffer{}
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
@@ -71,6 +71,7 @@ func objective(trial goptuna.Trial) (float64, error) {
 
 	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
 	line := lines[len(lines)-1]
+	log.Println("line:", line)
 
 	// {"pass":true,"score":2010,"campaign":0,"language":"Go","messages":[]}
 	var result struct {
