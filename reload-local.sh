@@ -8,6 +8,10 @@ cd ./webapp/go/
 make all
 cd ~/isucari
 
+cd ./optimizer/
+go build .
+cd ~/isucari
+
 # log rotate
 if [ -f /var/log/nginx/access.log ]; then
      sudo mv /var/log/nginx/access.log /var/log/nginx/access.log.$(date +"%Y%m%d_%H%M%S")
