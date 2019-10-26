@@ -31,15 +31,43 @@ func reload() error {
 	return nil
 }
 
+func bench() (int, error) {
+	cmd := exec.Command("./bin/benchmarker")
+	stdout := &bytes.Buffer{}
+	cmd.Stdout = stdout
+	cmd.Stderr = stdout
+
+	if err := cmd.Run(); err != nil {
+		return 0, err
+	}
+
+	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
+	line := lines[len(lines)-1]
+	log.Println("line:", line)
+
+	// {"pass":true,"score":2010,"campaign":0,"language":"Go","messages":[]}
+	var result struct {
+		Pass     bool     `json:"pass"`
+		Score    int      `json:"score"`
+		Campaign int      `json:"campaign"`
+		Language string   `json:"language"`
+		Messages []string `json:"messages"`
+	}
+
+	if err := json.Unmarshal([]byte(line), &result); err != nil {
+		return 0, err
+	}
+	return result.Score, nil
+}
+
 func objective(trial goptuna.Trial) (float64, error) {
-	// go mysql client
-	openconns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 32)
-	idleconns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 32)
-	lifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 64)
-	httpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 2048)
-	// 還元率: 有効な値は 0 以上 4 以下の整数で 0 の場合はキャンペーン機能が無効になります。
+	// go application
+	goMySQLOpenConns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 32)
+	goMySQLIdleConns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 32)
+	goMySQLMaxLifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 64)
+	goMySQLHttpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 2048)
 	campaign, _ := trial.SuggestInt("campaign", 0, 4)
-	if err := replaceEnv(openconns, idleconns, lifetime, httpIdleConnsPerHost, campaign); err != nil {
+	if err := replaceEnv(goMySQLOpenConns, goMySQLIdleConns, goMySQLMaxLifetime, goMySQLHttpIdleConnsPerHost, campaign); err != nil {
 		return 0, err
 	}
 
@@ -77,37 +105,14 @@ func objective(trial goptuna.Trial) (float64, error) {
 		return 0, err
 	}
 
-	// reload
 	if err := reload(); err != nil {
 		return 0, err
 	}
-
-	cmd := exec.Command("./bin/benchmarker")
-	stdout := &bytes.Buffer{}
-	cmd.Stdout = stdout
-	cmd.Stderr = stdout
-
-	if err := cmd.Run(); err != nil {
+	score, err := bench()
+	if err != nil {
 		return 0, err
 	}
-
-	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
-	line := lines[len(lines)-1]
-	log.Println("line:", line)
-
-	// {"pass":true,"score":2010,"campaign":0,"language":"Go","messages":[]}
-	var result struct {
-		Pass     bool     `json:"pass"`
-		Score    int      `json:"score"`
-		Campaign int      `json:"campaign"`
-		Language string   `json:"language"`
-		Messages []string `json:"messages"`
-	}
-
-	if err := json.Unmarshal([]byte(line), &result); err != nil {
-		return 0, err
-	}
-	return float64(result.Score), nil
+	return float64(score), nil
 }
 
 func main() {
