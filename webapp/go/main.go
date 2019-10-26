@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -63,6 +64,11 @@ var (
 	templates *template.Template
 	dbx       *sqlx.DB
 	store     sessions.Store
+)
+
+var (
+	userMap   = make(map[int64]*User)
+	userMapMu sync.RWMutex
 )
 
 type Config struct {
@@ -411,6 +417,13 @@ func getUser(r *http.Request) (user User, errCode int, errMsg string) {
 		return user, http.StatusNotFound, "no session"
 	}
 
+	userMapMu.RLock()
+	if val, ok := userMap[userID.(int64)]; ok {
+		userMapMu.RUnlock()
+		return *val, http.StatusOK, ""
+	}
+	userMapMu.RUnlock()
+
 	err := dbx.Get(&user, "SELECT * FROM `users` WHERE `id` = ?", userID)
 	if err == sql.ErrNoRows {
 		return user, http.StatusNotFound, "user not found"
@@ -419,32 +432,36 @@ func getUser(r *http.Request) (user User, errCode int, errMsg string) {
 		log.Print(err)
 		return user, http.StatusInternalServerError, "db error"
 	}
+	userMapMu.Lock()
+	defer userMapMu.Unlock()
+	userMap[userID.(int64)] = &user
 
 	return user, http.StatusOK, ""
 }
 
 func getUserSimpleByID(q sqlx.Queryer, userID int64) (userSimple UserSimple, err error) {
 	user := User{}
+	userMapMu.RLock()
+	if val, ok := userMap[userID]; ok {
+		userSimple.ID = val.ID
+		userSimple.AccountName = val.AccountName
+		userSimple.NumSellItems = val.NumSellItems
+		userMapMu.RUnlock()
+		return userSimple, err
+	}
+	userMapMu.RUnlock()
+
 	err = sqlx.Get(q, &user, "SELECT * FROM `users` WHERE `id` = ?", userID)
 	if err != nil {
 		return userSimple, err
 	}
+	userMapMu.Lock()
+	defer userMapMu.Unlock()
+	userMap[user.ID] = &user
 	userSimple.ID = user.ID
 	userSimple.AccountName = user.AccountName
 	userSimple.NumSellItems = user.NumSellItems
 	return userSimple, err
-}
-
-func getCategoryByID(q sqlx.Queryer, categoryID int) (category Category, err error) {
-	err = sqlx.Get(q, &category, "SELECT * FROM `categories` WHERE `id` = ?", categoryID)
-	if category.ParentID != 0 {
-		parentCategory, err := getCategoryByID(q, category.ParentID)
-		if err != nil {
-			return category, err
-		}
-		category.ParentCategoryName = parentCategory.CategoryName
-	}
-	return category, err
 }
 
 func getConfigByName(name string) (string, error) {
@@ -489,13 +506,27 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command("../sql/init.sh")
+	cmd := exec.CommandContext(r.Context(), "../sql/init.sh")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stderr
 	cmd.Run()
 	if err != nil {
 		outputErrorMsg(w, http.StatusInternalServerError, "exec init.sh error")
 		return
+	}
+
+	userMapMu.Lock()
+	defer userMapMu.Unlock()
+	userMap = make(map[int64]*User)
+	var userArr []*User
+	err = dbx.Select(&userArr, "SELECT * FROM users")
+	if err != nil {
+		log.Print(err)
+		outputErrorMsg(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	for _, user := range userArr {
+		userMap[user.ID] = user
 	}
 
 	_, err = dbx.Exec(
@@ -2180,13 +2211,9 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 
 	ress.PaymentServiceURL = getPaymentServiceURL()
 
-	categories := []Category{}
-
-	err := dbx.Select(&categories, "SELECT * FROM `categories`")
-	if err != nil {
-		log.Print(err)
-		outputErrorMsg(w, http.StatusInternalServerError, "db error")
-		return
+	categories := make([]Category, len(inMemoryCategories))
+	for _, c := range inMemoryCategories {
+		categories = append(categories, c)
 	}
 	ress.Categories = categories
 

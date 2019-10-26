@@ -35,7 +35,7 @@ func objective(trial goptuna.Trial) (float64, error) {
 	// go mysql client
 	openconns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 32)
 	idleconns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 32)
-	lifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 32)
+	lifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 64)
 	if err := replaceEnv(openconns, idleconns, lifetime); err != nil {
 		return 0, err
 	}
