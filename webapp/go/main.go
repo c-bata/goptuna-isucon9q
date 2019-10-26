@@ -64,6 +64,8 @@ var (
 	templates *template.Template
 	dbx       *sqlx.DB
 	store     sessions.Store
+
+	campaign = 0
 )
 
 var (
@@ -285,6 +287,22 @@ func init() {
 }
 
 func main() {
+	if v := os.Getenv("HTTP_MAX_IDLE_CONNS_PER_HOST"); v != "" {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = c
+	}
+
+	if v := os.Getenv("ISUCARI_CAMPAIGN"); v != "" {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		campaign = c
+	}
+
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
 		host = "127.0.0.1"
@@ -464,17 +482,15 @@ func getUserSimpleByID(q sqlx.Queryer, userID int64) (userSimple UserSimple, err
 	return userSimple, err
 }
 
+var (
+	config = map[string]string{
+		"payment_service_url":  DefaultPaymentServiceURL,
+		"shipment_service_url": DefaultShipmentServiceURL,
+	}
+)
+
 func getConfigByName(name string) (string, error) {
-	config := Config{}
-	err := dbx.Get(&config, "SELECT * FROM `configs` WHERE `name` = ?", name)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
-	if err != nil {
-		log.Print(err)
-		return "", err
-	}
-	return config.Val, err
+	return config[name], nil
 }
 
 func getPaymentServiceURL() string {
@@ -515,6 +531,9 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	config["payment_service_url"] = ri.PaymentServiceURL
+	config["shipment_service_url"] = ri.ShipmentServiceURL
+
 	userMapMu.Lock()
 	defer userMapMu.Unlock()
 	userMap = make(map[int64]*User)
@@ -552,7 +571,7 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 
 	res := resInitialize{
 		// キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
-		Campaign: 0,
+		Campaign: campaign,
 		// 実装言語を返す
 		Language: "Go",
 	}

@@ -36,7 +36,10 @@ func objective(trial goptuna.Trial) (float64, error) {
 	openconns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 32)
 	idleconns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 32)
 	lifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 64)
-	if err := replaceEnv(openconns, idleconns, lifetime); err != nil {
+	httpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 2048)
+	// 還元率: 有効な値は 0 以上 4 以下の整数で 0 の場合はキャンペーン機能が無効になります。
+	campaign, _ := trial.SuggestInt("campaign", 0, 4)
+	if err := replaceEnv(openconns, idleconns, lifetime, httpIdleConnsPerHost, campaign); err != nil {
 		return 0, err
 	}
 
