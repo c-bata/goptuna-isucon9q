@@ -8,7 +8,7 @@ import (
 
 var nginxConfPath string
 
-func replaceNginxConf(numOfWorkers int) error {
+func replaceNginxConf(numOfWorkers, workerConnections int) error {
 	_ = os.Remove(nginxConfPath)
 	content := fmt.Sprintf(`
 user www-data;
@@ -19,7 +19,7 @@ include /etc/nginx/modules-enabled/*.conf;
 error_log  /var/log/nginx/error.log error;
 
 events {
-    worker_connections 1024;
+    worker_connections %d;
 }
 
 http {
@@ -43,7 +43,7 @@ http {
     include conf.d/*.conf;
     include sites-enabled/*.conf;
 }
-`, numOfWorkers)
+`, numOfWorkers, workerConnections)
 	err := ioutil.WriteFile(nginxConfPath, []byte(content), 0644)
 	if err != nil {
 		return err

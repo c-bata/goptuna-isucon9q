@@ -44,8 +44,9 @@ func objective(trial goptuna.Trial) (float64, error) {
 	}
 
 	// nginx
-	numOfNginxWorkers, _ := trial.SuggestInt("nginx_worker_connections", 1, 16)
-	if err := replaceNginxConf(numOfNginxWorkers); err != nil {
+	numOfNginxWorkerProcesses, _ := trial.SuggestInt("nginx_worker_processes", 1, 16)
+	numOfNginxWorkerConns, _ := trial.SuggestInt("nginx_worker_connections", 1, 4096)
+	if err := replaceNginxConf(numOfNginxWorkerProcesses, numOfNginxWorkerConns); err != nil {
 		return 0, err
 	}
 
