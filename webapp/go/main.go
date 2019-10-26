@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -56,13 +57,20 @@ const (
 	ItemsPerPage        = 48
 	TransactionsPerPage = 10
 
-	BcryptCost = 10
+	BcryptCost = 4
 )
 
 var (
 	templates *template.Template
 	dbx       *sqlx.DB
 	store     sessions.Store
+
+	campaign = 0
+)
+
+var (
+	userMap   = make(map[int64]*User)
+	userMapMu sync.RWMutex
 )
 
 type Config struct {
@@ -194,8 +202,8 @@ type resUserItems struct {
 }
 
 type resTransactions struct {
-	HasNext bool         `json:"has_next"`
-	Items   []ItemDetail `json:"items"`
+	HasNext bool          `json:"has_next"`
+	Items   []*ItemDetail `json:"items"`
 }
 
 type reqRegister struct {
@@ -279,6 +287,22 @@ func init() {
 }
 
 func main() {
+	if v := os.Getenv("HTTP_MAX_IDLE_CONNS_PER_HOST"); v != "" {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = c
+	}
+
+	if v := os.Getenv("ISUCARI_CAMPAIGN"); v != "" {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		campaign = c
+	}
+
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
 		host = "127.0.0.1"
@@ -411,6 +435,13 @@ func getUser(r *http.Request) (user User, errCode int, errMsg string) {
 		return user, http.StatusNotFound, "no session"
 	}
 
+	userMapMu.RLock()
+	if val, ok := userMap[userID.(int64)]; ok {
+		userMapMu.RUnlock()
+		return *val, http.StatusOK, ""
+	}
+	userMapMu.RUnlock()
+
 	err := dbx.Get(&user, "SELECT * FROM `users` WHERE `id` = ?", userID)
 	if err == sql.ErrNoRows {
 		return user, http.StatusNotFound, "user not found"
@@ -419,45 +450,47 @@ func getUser(r *http.Request) (user User, errCode int, errMsg string) {
 		log.Print(err)
 		return user, http.StatusInternalServerError, "db error"
 	}
+	userMapMu.Lock()
+	defer userMapMu.Unlock()
+	userMap[userID.(int64)] = &user
 
 	return user, http.StatusOK, ""
 }
 
 func getUserSimpleByID(q sqlx.Queryer, userID int64) (userSimple UserSimple, err error) {
 	user := User{}
+	userMapMu.RLock()
+	if val, ok := userMap[userID]; ok {
+		userSimple.ID = val.ID
+		userSimple.AccountName = val.AccountName
+		userSimple.NumSellItems = val.NumSellItems
+		userMapMu.RUnlock()
+		return userSimple, err
+	}
+	userMapMu.RUnlock()
+
 	err = sqlx.Get(q, &user, "SELECT * FROM `users` WHERE `id` = ?", userID)
 	if err != nil {
 		return userSimple, err
 	}
+	userMapMu.Lock()
+	defer userMapMu.Unlock()
+	userMap[user.ID] = &user
 	userSimple.ID = user.ID
 	userSimple.AccountName = user.AccountName
 	userSimple.NumSellItems = user.NumSellItems
 	return userSimple, err
 }
 
-func getCategoryByID(q sqlx.Queryer, categoryID int) (category Category, err error) {
-	err = sqlx.Get(q, &category, "SELECT * FROM `categories` WHERE `id` = ?", categoryID)
-	if category.ParentID != 0 {
-		parentCategory, err := getCategoryByID(q, category.ParentID)
-		if err != nil {
-			return category, err
-		}
-		category.ParentCategoryName = parentCategory.CategoryName
+var (
+	config = map[string]string{
+		"payment_service_url":  DefaultPaymentServiceURL,
+		"shipment_service_url": DefaultShipmentServiceURL,
 	}
-	return category, err
-}
+)
 
 func getConfigByName(name string) (string, error) {
-	config := Config{}
-	err := dbx.Get(&config, "SELECT * FROM `configs` WHERE `name` = ?", name)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
-	if err != nil {
-		log.Print(err)
-		return "", err
-	}
-	return config.Val, err
+	return config[name], nil
 }
 
 func getPaymentServiceURL() string {
@@ -489,13 +522,30 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command("../sql/init.sh")
+	cmd := exec.CommandContext(r.Context(), "../sql/init.sh")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stderr
 	cmd.Run()
 	if err != nil {
 		outputErrorMsg(w, http.StatusInternalServerError, "exec init.sh error")
 		return
+	}
+
+	config["payment_service_url"] = ri.PaymentServiceURL
+	config["shipment_service_url"] = ri.ShipmentServiceURL
+
+	userMapMu.Lock()
+	defer userMapMu.Unlock()
+	userMap = make(map[int64]*User)
+	var userArr []*User
+	err = dbx.Select(&userArr, "SELECT * FROM users")
+	if err != nil {
+		log.Print(err)
+		outputErrorMsg(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	for _, user := range userArr {
+		userMap[user.ID] = user
 	}
 
 	_, err = dbx.Exec(
@@ -521,7 +571,7 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 
 	res := resInitialize{
 		// キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
-		Campaign: 0,
+		Campaign: campaign,
 		// 実装言語を返す
 		Language: "Go",
 	}
@@ -895,19 +945,45 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tx := dbx.MustBegin()
-	items := []Item{}
+	var rows *sqlx.Rows
 	if itemID > 0 && createdAt > 0 {
 		// paging
-		err := tx.Select(&items,
-			"SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) AND `status` IN (?,?,?,?,?) AND (`created_at` < ?  OR (`created_at` <= ? AND `id` < ?)) ORDER BY `created_at` DESC, `id` DESC LIMIT ?",
+		rows, err = dbx.Queryx(
+			`SELECT 
+	items.id, 
+	items.seller_id, 
+	items.status,
+	items.name,
+	items.description,
+	items.image_name,
+	items.category_id,
+	items.created_at,
+	items.buyer_id,
+	te_ship.id as te_id,
+	te_ship.reserve_id,
+	te_ship.status as te_status
+FROM 
+	items 
+LEFT JOIN 
+	(
+		SELECT 
+			transaction_evidences.id,
+			transaction_evidences.item_id, 
+			transaction_evidences.status, 
+			shippings.reserve_id  
+		FROM 
+			transaction_evidences 
+		RIGHT JOIN 
+			shippings 
+		ON transaction_evidences.id = shippings.transaction_evidence_id
+	) AS te_ship ON items.id = te_ship.item_id 
+WHERE 
+	(seller_id = ? OR buyer_id = ?) 
+	AND (created_at < ?  OR (created_at <= ? AND items.id < ?)) 
+ORDER BY 
+	created_at DESC, items.id DESC LIMIT ?`,
 			user.ID,
 			user.ID,
-			ItemStatusOnSale,
-			ItemStatusTrading,
-			ItemStatusSoldOut,
-			ItemStatusCancel,
-			ItemStatusStop,
 			time.Unix(createdAt, 0),
 			time.Unix(createdAt, 0),
 			itemID,
@@ -916,46 +992,92 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Print(err)
 			outputErrorMsg(w, http.StatusInternalServerError, "db error")
-			tx.Rollback()
 			return
 		}
 	} else {
 		// 1st page
-		err := tx.Select(&items,
-			"SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) AND `status` IN (?,?,?,?,?) ORDER BY `created_at` DESC, `id` DESC LIMIT ?",
+		rows, err = dbx.Queryx(
+			`SELECT 
+	items.id, 
+	items.seller_id, 
+	items.status,
+	items.name,
+	items.description,
+	items.image_name,
+	items.category_id,
+	items.created_at,
+	items.buyer_id,
+	te_ship.id as te_id,
+	te_ship.reserve_id,
+	te_ship.status as te_status
+FROM 
+	items 
+LEFT JOIN 
+	(
+		SELECT 
+			transaction_evidences.id,
+			transaction_evidences.item_id, 
+			transaction_evidences.status, 
+			shippings.reserve_id  
+		FROM 
+			transaction_evidences 
+		RIGHT JOIN 
+			shippings 
+		ON transaction_evidences.id = shippings.transaction_evidence_id
+	) AS te_ship ON items.id = te_ship.item_id 
+WHERE 
+	(seller_id = ? OR buyer_id = ?) 
+ORDER BY created_at DESC, items.id DESC LIMIT ?`,
 			user.ID,
 			user.ID,
-			ItemStatusOnSale,
-			ItemStatusTrading,
-			ItemStatusSoldOut,
-			ItemStatusCancel,
-			ItemStatusStop,
 			TransactionsPerPage+1,
 		)
 		if err != nil {
 			log.Print(err)
 			outputErrorMsg(w, http.StatusInternalServerError, "db error")
-			tx.Rollback()
 			return
 		}
 	}
 
-	itemDetails := []ItemDetail{}
-	for _, item := range items {
-		seller, err := getUserSimpleByID(tx, item.SellerID)
+	itemDetails := []*ItemDetail{}
+	var wg sync.WaitGroup
+	for rows.Next() {
+		item := Item{}
+		teID := sql.NullInt64{}
+		reserveID := sql.NullString{}
+		teStatus := sql.NullString{}
+		err := rows.Scan(
+			&item.ID,
+			&item.SellerID,
+			&item.Status,
+			&item.Name,
+			&item.Description,
+			&item.ImageName,
+			&item.CategoryID,
+			&item.CreatedAt,
+			&item.BuyerID,
+			&teID,
+			&reserveID,
+			&teStatus,
+		)
 		if err != nil {
-			outputErrorMsg(w, http.StatusNotFound, "seller not found")
-			tx.Rollback()
-			return
-		}
-		category, err := getCategoryByID(tx, item.CategoryID)
-		if err != nil {
-			outputErrorMsg(w, http.StatusNotFound, "category not found")
-			tx.Rollback()
+			log.Print(err)
+			outputErrorMsg(w, http.StatusInternalServerError, "db error")
 			return
 		}
 
-		itemDetail := ItemDetail{
+		seller, err := getUserSimpleByID(dbx, item.SellerID)
+		if err != nil {
+			outputErrorMsg(w, http.StatusNotFound, "seller not found")
+			return
+		}
+		category, err := getCategoryByID(dbx, item.CategoryID)
+		if err != nil {
+			outputErrorMsg(w, http.StatusNotFound, "category not found")
+			return
+		}
+
+		itemDetail := &ItemDetail{
 			ID:       item.ID,
 			SellerID: item.SellerID,
 			Seller:   &seller,
@@ -975,58 +1097,40 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if item.BuyerID != 0 {
-			buyer, err := getUserSimpleByID(tx, item.BuyerID)
+			buyer, err := getUserSimpleByID(dbx, item.BuyerID)
 			if err != nil {
 				outputErrorMsg(w, http.StatusNotFound, "buyer not found")
-				tx.Rollback()
 				return
 			}
 			itemDetail.BuyerID = item.BuyerID
 			itemDetail.Buyer = &buyer
 		}
 
-		transactionEvidence := TransactionEvidence{}
-		err = tx.Get(&transactionEvidence, "SELECT * FROM `transaction_evidences` WHERE `item_id` = ?", item.ID)
-		if err != nil && err != sql.ErrNoRows {
-			// It's able to ignore ErrNoRows
-			log.Print(err)
-			outputErrorMsg(w, http.StatusInternalServerError, "db error")
-			tx.Rollback()
-			return
+		if teID.Valid && reserveID.Valid {
+			teIDValue := teID.Int64
+			teStatusValue := teStatus.String
+			reserveIDValue := reserveID.String
+			itemDetail.TransactionEvidenceID = teIDValue
+			itemDetail.TransactionEvidenceStatus = teStatusValue
+
+			wg.Add(1)
+			go func() {
+				ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
+					ReserveID: reserveIDValue,
+				})
+				if err != nil {
+					log.Print(err)
+					outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
+					return
+				}
+
+				itemDetail.ShippingStatus = ssr.Status
+				wg.Done()
+			}()
 		}
-
-		if transactionEvidence.ID > 0 {
-			shipping := Shipping{}
-			err = tx.Get(&shipping, "SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ?", transactionEvidence.ID)
-			if err == sql.ErrNoRows {
-				outputErrorMsg(w, http.StatusNotFound, "shipping not found")
-				tx.Rollback()
-				return
-			}
-			if err != nil {
-				log.Print(err)
-				outputErrorMsg(w, http.StatusInternalServerError, "db error")
-				tx.Rollback()
-				return
-			}
-			ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
-				ReserveID: shipping.ReserveID,
-			})
-			if err != nil {
-				log.Print(err)
-				outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
-				tx.Rollback()
-				return
-			}
-
-			itemDetail.TransactionEvidenceID = transactionEvidence.ID
-			itemDetail.TransactionEvidenceStatus = transactionEvidence.Status
-			itemDetail.ShippingStatus = ssr.Status
-		}
-
 		itemDetails = append(itemDetails, itemDetail)
 	}
-	tx.Commit()
+	wg.Wait()
 
 	hasNext := false
 	if len(itemDetails) > TransactionsPerPage {
@@ -2049,6 +2153,11 @@ func postSell(w http.ResponseWriter, r *http.Request) {
 	}
 	tx.Commit()
 
+	userMapMu.Lock()
+	userMap[seller.ID].LastBump = now
+	userMap[seller.ID].NumSellItems++
+	userMapMu.Unlock()
+
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	json.NewEncoder(w).Encode(resSell{ID: itemID})
 }
@@ -2180,13 +2289,9 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 
 	ress.PaymentServiceURL = getPaymentServiceURL()
 
-	categories := []Category{}
-
-	err := dbx.Select(&categories, "SELECT * FROM `categories`")
-	if err != nil {
-		log.Print(err)
-		outputErrorMsg(w, http.StatusInternalServerError, "db error")
-		return
+	categories := make([]Category, len(inMemoryCategories))
+	for _, c := range inMemoryCategories {
+		categories = append(categories, c)
 	}
 	ress.Categories = categories
 
