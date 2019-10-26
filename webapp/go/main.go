@@ -2080,6 +2080,11 @@ func postSell(w http.ResponseWriter, r *http.Request) {
 	}
 	tx.Commit()
 
+	userMapMu.Lock()
+	userMap[seller.ID].LastBump = now
+	userMap[seller.ID].NumSellItems++
+	userMapMu.Unlock()
+
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	json.NewEncoder(w).Encode(resSell{ID: itemID})
 }
