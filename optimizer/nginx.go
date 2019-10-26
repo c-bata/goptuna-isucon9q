@@ -38,7 +38,7 @@ http {
     tcp_nodelay on;
 	gzip %s;
     keepalive_timeout %d;
-	open_file_cache max=%d inactive=%ds
+	open_file_cache max=%d inactive=%ds;
 
     client_max_body_size 10m;
 
