@@ -141,7 +141,7 @@ func main() {
 		log.Fatal("failed to create study:", err)
 	}
 
-	err = study.Optimize(objective, 50)
+	err = study.Optimize(objective, 250)
 	if err != nil {
 		log.Print("optimize catch error:", err)
 	}
