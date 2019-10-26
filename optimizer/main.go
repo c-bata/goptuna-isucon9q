@@ -20,13 +20,13 @@ import (
 
 func reload() error {
 	if err := exec.Command("/bin/sh", "-c", "sudo systemctl restart isucari.golang.service").Run(); err != nil {
-		return fmt.Errorf("failed to relaod app: %s", err)
+		return fmt.Errorf("failed to reload app: %s", err)
 	}
 	if err := exec.Command("/bin/sh", "-c", "sudo systemctl restart nginx.service").Run(); err != nil {
-		return fmt.Errorf("failed to relaod app: %s", err)
+		return fmt.Errorf("failed to reload nginx: %s", err)
 	}
 	if err := exec.Command("/bin/sh", "-c", "sudo systemctl restart mysql.service").Run(); err != nil {
-		return fmt.Errorf("failed to relaod app: %s", err)
+		return fmt.Errorf("failed to relaod mysql: %s", err)
 	}
 	return nil
 }
