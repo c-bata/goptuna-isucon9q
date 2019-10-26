@@ -53,6 +53,9 @@ echo "Success to restart!"
 rm -rf /home/isucon/isucari/webapp/private
 mkdir -p /home/isucon/isucari/webapp/private/qrcode
 
+echo "Run benchmarker"
+./bin/benchmarker
+
 EOF
 
 #curl -XPOST https://isucon9.catatsuy.org/initialize -H 'Content-Type: application/json' -d '{"payment_service_url":"https://payment.isucon9q.catatsuy.org","shipment_service_url":"https://shipment.isucon9q.catatsuy.org"}'
