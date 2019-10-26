@@ -8,7 +8,13 @@ import (
 
 var nginxConfPath string
 
-func replaceNginxConf(numOfWorkers, workerConnections int) error {
+func replaceNginxConf(
+	numOfWorkers,
+	workerConnections,
+	nginxKeepAliveTimeout,
+	nginxOpenFileCacheMax,
+	nginxOpenFileCacheInActive int,
+	nginxGzip string) error {
 	_ = os.Remove(nginxConfPath)
 	content := fmt.Sprintf(`
 user www-data;
@@ -30,7 +36,10 @@ http {
     sendfile on;
     tcp_nopush on;
     tcp_nodelay on;
-    keepalive_timeout 120;
+	gzip %s;
+    keepalive_timeout %d;
+	open_file_cache max=%d inactive=%ds
+
     client_max_body_size 10m;
 
     access_log /var/log/nginx/access.log;
@@ -43,7 +52,7 @@ http {
     include conf.d/*.conf;
     include sites-enabled/*.conf;
 }
-`, numOfWorkers, workerConnections)
+`, numOfWorkers, workerConnections, nginxGzip, nginxKeepAliveTimeout, nginxOpenFileCacheMax, nginxOpenFileCacheInActive)
 	err := ioutil.WriteFile(nginxConfPath, []byte(content), 0644)
 	if err != nil {
 		return err

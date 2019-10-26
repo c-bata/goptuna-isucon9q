@@ -8,7 +8,7 @@ import (
 
 var mysqlConfPath string
 
-func replaceMySQLConf(innoDBBufferPoolSize, innoDBLogBufferSize, innoDBLogFileSize int, innoDBFlushLogAtTRXCommit string) error {
+func replaceMySQLConf(innoDBBufferPoolSize, innoDBLogBufferSize, innoDBLogFileSize int, innoDBFlushLogAtTRXCommit, innodbFlushMethod string) error {
 	_ = os.Remove(mysqlConfPath)
 	content := fmt.Sprintf(`
 #
@@ -121,8 +121,8 @@ innodb_buffer_pool_size = %dM
 innodb_log_buffer_size = %dM
 innodb_log_file_size = %dM
 innodb_flush_log_at_trx_commit = %s
-innodb_flush_method = O_DIRECT
-`, innoDBBufferPoolSize, innoDBLogBufferSize, innoDBLogFileSize, innoDBFlushLogAtTRXCommit)
+innodb_flush_method = %s
+`, innoDBBufferPoolSize, innoDBLogBufferSize, innoDBLogFileSize, innoDBFlushLogAtTRXCommit, innodbFlushMethod)
 	err := ioutil.WriteFile(mysqlConfPath, []byte(content), 0644)
 	if err != nil {
 		return err
