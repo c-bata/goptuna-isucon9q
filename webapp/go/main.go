@@ -1509,6 +1509,11 @@ func postBuy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if checkSold(rb.ItemID) {
+		outputErrorMsg(w, http.StatusForbidden, "item is not for sale")
+		return
+	}
+
 	tx := dbx.MustBegin()
 
 	targetItem := Item{}
@@ -1527,6 +1532,7 @@ func postBuy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if targetItem.Status != ItemStatusOnSale {
+		setSold(rb.ItemID)
 		outputErrorMsg(w, http.StatusForbidden, "item is not for sale")
 		tx.Rollback()
 		return
@@ -2538,4 +2544,22 @@ func outputErrorMsg(w http.ResponseWriter, status int, msg string) {
 
 func getImageURL(imageName string) string {
 	return fmt.Sprintf("/upload/%s", imageName)
+}
+
+var (
+	soldCacheMutex sync.Mutex
+	soldCache      = make(map[int64]bool)
+)
+
+func checkSold(itemID int64) bool {
+	soldCacheMutex.Lock()
+	res := soldCache[itemID]
+	soldCacheMutex.Unlock()
+	return res
+}
+
+func setSold(itemID int64) {
+	soldCacheMutex.Lock()
+	soldCache[itemID] = true
+	soldCacheMutex.Unlock()
 }
