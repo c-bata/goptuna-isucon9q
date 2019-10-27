@@ -25,9 +25,9 @@ http {
     sendfile on;
     tcp_nopush on;
     tcp_nodelay on;
-	gzip {{.Gzip}};
+    gzip {{.Gzip}};
     keepalive_timeout {{.KeepAliveTimeout}};
-	open_file_cache max={{.OpenFileCacheMax}} inactive={{.OpenFileCacheInActive}}s;
+    open_file_cache max={{.OpenFileCacheMax}} inactive={{.OpenFileCacheInActive}}s;
 
     client_max_body_size 10m;
 
