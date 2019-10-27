@@ -16,7 +16,6 @@ MYSQL_MAX_OPEN_CONNECTIONS={{.MaxOpenConns}}
 MYSQL_MAX_IDLE_CONNECTIONS={{.MaxIdleConns}}
 MYSQL_MAX_LIFETIME_SECONDS={{.MaxLifetimeSeconds}}
 
-HTTP_MAX_IDLE_CONNS_PER_HOST={{.MaxIdleConnsPerHost}}
 ISUCARI_CAMPAIGN={{.Campaign}}
 `
 
@@ -27,11 +26,10 @@ var (
 )
 
 type EnvfileContext struct {
-	MaxOpenConns        int
-	MaxIdleConns        int
-	MaxLifetimeSeconds  int
-	MaxIdleConnsPerHost int
-	Campaign            int
+	MaxOpenConns       int
+	MaxIdleConns       int
+	MaxLifetimeSeconds int
+	Campaign           int
 }
 
 func replaceEnv(envfileCtx EnvfileContext) error {

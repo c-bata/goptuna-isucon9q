@@ -60,60 +60,59 @@ func bench() (int, error) {
 
 func objective(trial goptuna.Trial) (float64, error) {
 	// Go application
-	goMySQLOpenConns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 32)
-	goMySQLIdleConns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 32)
-	goMySQLMaxLifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 64)
-	goMySQLHttpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 2048)
-	campaign, _ := trial.SuggestInt("campaign", 0, 4)
+	goMySQLOpenConns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 128)
+	goMySQLIdleConns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 128)
+	goMySQLMaxLifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 512)
+	//goMySQLHttpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 2048)
+	//campaign, _ := trial.SuggestInt("campaign", 0, 4)
 	if err := replaceEnv(EnvfileContext{
-		MaxOpenConns:        goMySQLOpenConns,
-		MaxIdleConns:        goMySQLIdleConns,
-		MaxLifetimeSeconds:  goMySQLMaxLifetime,
-		MaxIdleConnsPerHost: goMySQLHttpIdleConnsPerHost,
-		Campaign:            campaign,
+		MaxOpenConns:       goMySQLOpenConns,
+		MaxIdleConns:       goMySQLIdleConns,
+		MaxLifetimeSeconds: goMySQLMaxLifetime,
+		Campaign:           1,
 	}); err != nil {
 		return 0, err
 	}
 
 	// Nginx
-	nginxWorkerProcesses, _ := trial.SuggestInt("nginx_worker_processes", 1, 16)
-	nginxWorkerConns, _ := trial.SuggestInt("nginx_worker_connections", 1, 4096)
-	nginxKeepAliveTimeout, _ := trial.SuggestInt("nginx_keep_alive_timeout", 1, 100)
-	nginxOpenFileCacheMax, _ := trial.SuggestInt("nginx_open_file_cache_max", 100, 10000)
-	nginxOpenFileCacheInActive, _ := trial.SuggestInt("nginx_open_file_cache_inactive", 1, 64)
-	nginxGzip, _ := trial.SuggestCategorical("nginx_gzip", []string{"on", "off"})
-	if err := replaceNginxConf(NginxContext{
-		WorkerProcesses:       nginxWorkerProcesses,
-		WorkerConnections:     nginxWorkerConns,
-		KeepAliveTimeout:      nginxKeepAliveTimeout,
-		OpenFileCacheMax:      nginxOpenFileCacheMax,
-		OpenFileCacheInActive: nginxOpenFileCacheInActive,
-		Gzip:                  nginxGzip,
-	}); err != nil {
-		return 0, err
-	}
+	//nginxWorkerProcesses, _ := trial.SuggestInt("nginx_worker_processes", 1, 16)
+	//nginxWorkerConns, _ := trial.SuggestInt("nginx_worker_connections", 1, 4096)
+	//nginxKeepAliveTimeout, _ := trial.SuggestInt("nginx_keep_alive_timeout", 1, 100)
+	//nginxOpenFileCacheMax, _ := trial.SuggestInt("nginx_open_file_cache_max", 100, 10000)
+	//nginxOpenFileCacheInActive, _ := trial.SuggestInt("nginx_open_file_cache_inactive", 1, 64)
+	//nginxGzip, _ := trial.SuggestCategorical("nginx_gzip", []string{"on", "off"})
+	//if err := replaceNginxConf(NginxContext{
+	//	WorkerProcesses:       nginxWorkerProcesses,
+	//	WorkerConnections:     nginxWorkerConns,
+	//	KeepAliveTimeout:      nginxKeepAliveTimeout,
+	//	OpenFileCacheMax:      nginxOpenFileCacheMax,
+	//	OpenFileCacheInActive: nginxOpenFileCacheInActive,
+	//	Gzip:                  nginxGzip,
+	//}); err != nil {
+	//	return 0, err
+	//}
 
 	// MySQL
-	innoDBBufferPoolSize, _ := trial.SuggestInt("innodb_buffer_pool_size", 10, 800)
-	innoDBLogBufferSize, _ := trial.SuggestInt("innodb_log_buffer_size", 1, 64)
-	innoDBLogFileSize, _ := trial.SuggestInt("innodb_log_file_size", 10, 1024)
-	innoDBFlushLogAtTRXCommit, _ := trial.SuggestCategorical("innodb_flush_log_at_trx_commit", []string{"0", "1", "2"})
-	innodbFlushMethod, _ := trial.SuggestCategorical("innodb_flush_method", []string{
-		"fsync",
-		"littlesync",
-		"nosync",
-		"O_DIRECT",
-		"O_DIRECT_NO_FSYNC",
-	})
-	if err := replaceMySQLConf(MySQLContext{
-		InnoDBBufferPoolSize:      innoDBBufferPoolSize,
-		InnoDBLogBufferSize:       innoDBLogBufferSize,
-		InnoDBLogFileSize:         innoDBLogFileSize,
-		InnoDBFlushLogAtTRXCommit: innoDBFlushLogAtTRXCommit,
-		InnodbFlushMethod:         innodbFlushMethod,
-	}); err != nil {
-		return 0, err
-	}
+	//innoDBBufferPoolSize, _ := trial.SuggestInt("innodb_buffer_pool_size", 10, 800)
+	//innoDBLogBufferSize, _ := trial.SuggestInt("innodb_log_buffer_size", 1, 64)
+	//innoDBLogFileSize, _ := trial.SuggestInt("innodb_log_file_size", 10, 1024)
+	//innoDBFlushLogAtTRXCommit, _ := trial.SuggestCategorical("innodb_flush_log_at_trx_commit", []string{"0", "1", "2"})
+	//innodbFlushMethod, _ := trial.SuggestCategorical("innodb_flush_method", []string{
+	//	"fsync",
+	//	"littlesync",
+	//	"nosync",
+	//	"O_DIRECT",
+	//	"O_DIRECT_NO_FSYNC",
+	//})
+	//if err := replaceMySQLConf(MySQLContext{
+	//	InnoDBBufferPoolSize:      innoDBBufferPoolSize,
+	//	InnoDBLogBufferSize:       innoDBLogBufferSize,
+	//	InnoDBLogFileSize:         innoDBLogFileSize,
+	//	InnoDBFlushLogAtTRXCommit: innoDBFlushLogAtTRXCommit,
+	//	InnodbFlushMethod:         innodbFlushMethod,
+	//}); err != nil {
+	//	return 0, err
+	//}
 
 	if err := reload(); err != nil {
 		return 0, err
