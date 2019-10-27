@@ -1,16 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
+	"html/template"
 	"os"
 )
 
-var mysqlConfPath string
-
-func replaceMySQLConf(innoDBBufferPoolSize, innoDBLogBufferSize, innoDBLogFileSize int, innoDBFlushLogAtTRXCommit, innodbFlushMethod string) error {
-	_ = os.Remove(mysqlConfPath)
-	content := fmt.Sprintf(`
+const mycnf = `
 #
 # The MySQL database server configuration file.
 #
@@ -117,15 +112,32 @@ max_binlog_size   = 100M
 # ssl-cert=/etc/mysql/server-cert.pem
 # ssl-key=/etc/mysql/server-key.pem
 
-innodb_buffer_pool_size = %dM
-innodb_log_buffer_size = %dM
-innodb_log_file_size = %dM
-innodb_flush_log_at_trx_commit = %s
-innodb_flush_method = %s
-`, innoDBBufferPoolSize, innoDBLogBufferSize, innoDBLogFileSize, innoDBFlushLogAtTRXCommit, innodbFlushMethod)
-	err := ioutil.WriteFile(mysqlConfPath, []byte(content), 0644)
+innodb_buffer_pool_size = {{.InnoDBBufferPoolSize}}M
+innodb_log_buffer_size = {{.InnoDBLogBufferSize}}M
+innodb_log_file_size = {{.InnoDBLogFileSize}}M
+innodb_flush_log_at_trx_commit = {{.InnoDBFlushLogAtTRXCommit}}
+innodb_flush_method = {{.InnodbFlushMethod}}
+`
+
+var (
+	mysqlConfPath string
+
+	mysqlTemplate = template.Must(template.New("mycnf").Parse(mycnf))
+)
+
+type MySQLContext struct {
+	InnoDBBufferPoolSize      int    // default 128MB
+	InnoDBLogBufferSize       int    // default 8MB or 16MB
+	InnoDBLogFileSize         int    // default 48MB
+	InnoDBFlushLogAtTRXCommit string // default 1
+	InnodbFlushMethod         string // default fsync
+}
+
+func replaceMySQLConf(mysqlCtx MySQLContext) error {
+	_ = os.Remove(mysqlConfPath)
+	f, err := os.Create(mysqlConfPath)
 	if err != nil {
 		return err
 	}
-	return nil
+	return mysqlTemplate.Execute(f, mysqlCtx)
 }

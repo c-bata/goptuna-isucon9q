@@ -10,9 +10,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/c-bata/goptuna/rdb"
-
 	"github.com/c-bata/goptuna"
+	"github.com/c-bata/goptuna/rdb"
 	"github.com/c-bata/goptuna/tpe"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -45,7 +44,6 @@ func bench() (int, error) {
 	line := lines[len(lines)-1]
 	log.Println("line:", line)
 
-	// {"pass":true,"score":2010,"campaign":0,"language":"Go","messages":[]}
 	var result struct {
 		Pass     bool     `json:"pass"`
 		Score    int      `json:"score"`
@@ -61,39 +59,45 @@ func bench() (int, error) {
 }
 
 func objective(trial goptuna.Trial) (float64, error) {
-	// go application
+	// Go application
 	goMySQLOpenConns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 32)
 	goMySQLIdleConns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 32)
 	goMySQLMaxLifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 64)
 	goMySQLHttpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 2048)
 	campaign, _ := trial.SuggestInt("campaign", 0, 4)
-	if err := replaceEnv(goMySQLOpenConns, goMySQLIdleConns, goMySQLMaxLifetime, goMySQLHttpIdleConnsPerHost, campaign); err != nil {
+	if err := replaceEnv(EnvfileContext{
+		MaxOpenConns:        goMySQLOpenConns,
+		MaxIdleConns:        goMySQLIdleConns,
+		MaxLifetimeSeconds:  goMySQLMaxLifetime,
+		MaxIdleConnsPerHost: goMySQLHttpIdleConnsPerHost,
+		Campaign:            campaign,
+	}); err != nil {
 		return 0, err
 	}
 
-	// nginx
+	// Nginx
 	nginxWorkerProcesses, _ := trial.SuggestInt("nginx_worker_processes", 1, 16)
 	nginxWorkerConns, _ := trial.SuggestInt("nginx_worker_connections", 1, 4096)
 	nginxKeepAliveTimeout, _ := trial.SuggestInt("nginx_keep_alive_timeout", 1, 100)
 	nginxOpenFileCacheMax, _ := trial.SuggestInt("nginx_open_file_cache_max", 100, 10000)
 	nginxOpenFileCacheInActive, _ := trial.SuggestInt("nginx_open_file_cache_inactive", 1, 64)
 	nginxGzip, _ := trial.SuggestCategorical("nginx_gzip", []string{"on", "off"})
-	if err := replaceNginxConf(
-		nginxWorkerProcesses,
-		nginxWorkerConns,
-		nginxKeepAliveTimeout,
-		nginxOpenFileCacheMax,
-		nginxOpenFileCacheInActive,
-		nginxGzip,
-	); err != nil {
+	if err := replaceNginxConf(NginxContext{
+		WorkerProcesses:       nginxWorkerProcesses,
+		WorkerConnections:     nginxWorkerConns,
+		KeepAliveTimeout:      nginxKeepAliveTimeout,
+		OpenFileCacheMax:      nginxOpenFileCacheMax,
+		OpenFileCacheInActive: nginxOpenFileCacheInActive,
+		Gzip:                  nginxGzip,
+	}); err != nil {
 		return 0, err
 	}
 
-	// mysql
-	innoDBBufferPoolSize, _ := trial.SuggestInt("innodb_buffer_pool_size", 10, 800)                                     // default 128MB
-	innoDBLogBufferSize, _ := trial.SuggestInt("innodb_log_buffer_size", 1, 64)                                         // default 8MB or 16MB
-	innoDBLogFileSize, _ := trial.SuggestInt("innodb_log_file_size", 10, 1024)                                          // default 48MB
-	innoDBFlushLogAtTRXCommit, _ := trial.SuggestCategorical("innodb_flush_log_at_trx_commit", []string{"0", "1", "2"}) // default 1
+	// MySQL
+	innoDBBufferPoolSize, _ := trial.SuggestInt("innodb_buffer_pool_size", 10, 800)
+	innoDBLogBufferSize, _ := trial.SuggestInt("innodb_log_buffer_size", 1, 64)
+	innoDBLogFileSize, _ := trial.SuggestInt("innodb_log_file_size", 10, 1024)
+	innoDBFlushLogAtTRXCommit, _ := trial.SuggestCategorical("innodb_flush_log_at_trx_commit", []string{"0", "1", "2"})
 	innodbFlushMethod, _ := trial.SuggestCategorical("innodb_flush_method", []string{
 		"fsync",
 		"littlesync",
@@ -101,7 +105,13 @@ func objective(trial goptuna.Trial) (float64, error) {
 		"O_DIRECT",
 		"O_DIRECT_NO_FSYNC",
 	})
-	if err := replaceMySQLConf(innoDBBufferPoolSize, innoDBLogBufferSize, innoDBLogFileSize, innoDBFlushLogAtTRXCommit, innodbFlushMethod); err != nil {
+	if err := replaceMySQLConf(MySQLContext{
+		InnoDBBufferPoolSize:      innoDBBufferPoolSize,
+		InnoDBLogBufferSize:       innoDBLogBufferSize,
+		InnoDBLogFileSize:         innoDBLogFileSize,
+		InnoDBFlushLogAtTRXCommit: innoDBFlushLogAtTRXCommit,
+		InnodbFlushMethod:         innodbFlushMethod,
+	}); err != nil {
 		return 0, err
 	}
 
@@ -136,6 +146,7 @@ func main() {
 		goptuna.StudyOptionStorage(storage),
 		goptuna.StudyOptionSampler(tpe.NewSampler()),
 		goptuna.StudyOptionSetDirection(goptuna.StudyDirectionMaximize),
+		goptuna.StudyOptionIgnoreError(true),
 	)
 	if err != nil {
 		log.Fatal("failed to create study:", err)
