@@ -1,25 +1,20 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
+	"html/template"
 	"os"
 )
 
-var nginxConfPath string
-
-func replaceNginxConf(numOfWorkers, workerConnections int) error {
-	_ = os.Remove(nginxConfPath)
-	content := fmt.Sprintf(`
+const nginxconf = `
 user www-data;
-worker_processes %d;
+worker_processes {{.WorkerProcesses}};
 pid /run/nginx.pid;
 include /etc/nginx/modules-enabled/*.conf;
 
 error_log  /var/log/nginx/error.log error;
 
 events {
-    worker_connections %d;
+    worker_connections {{.WorkerConnections}};
 }
 
 http {
@@ -30,7 +25,10 @@ http {
     sendfile on;
     tcp_nopush on;
     tcp_nodelay on;
-    keepalive_timeout 120;
+    gzip {{.Gzip}};
+    keepalive_timeout {{.KeepAliveTimeout}};
+    open_file_cache max={{.OpenFileCacheMax}} inactive={{.OpenFileCacheInActive}}s;
+
     client_max_body_size 10m;
 
     access_log /var/log/nginx/access.log;
@@ -43,10 +41,28 @@ http {
     include conf.d/*.conf;
     include sites-enabled/*.conf;
 }
-`, numOfWorkers, workerConnections)
-	err := ioutil.WriteFile(nginxConfPath, []byte(content), 0644)
+`
+
+var (
+	nginxConfPath string
+
+	nginxTemplate = template.Must(template.New("nginxconf").Parse(nginxconf))
+)
+
+type NginxContext struct {
+	WorkerProcesses       int
+	WorkerConnections     int
+	KeepAliveTimeout      int
+	OpenFileCacheMax      int
+	OpenFileCacheInActive int
+	Gzip                  string
+}
+
+func replaceNginxConf(nginxCtx NginxContext) error {
+	_ = os.Remove(nginxConfPath)
+	f, err := os.Create(nginxConfPath)
 	if err != nil {
 		return err
 	}
-	return nil
+	return nginxTemplate.Execute(f, nginxCtx)
 }
