@@ -60,11 +60,11 @@ func bench() (int, error) {
 
 func objective(trial goptuna.Trial) (float64, error) {
 	// Go application
-	goMySQLOpenConns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 32)
-	goMySQLIdleConns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 32)
-	goMySQLMaxLifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 64)
-	goMySQLHttpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 2048)
-	campaign, _ := trial.SuggestInt("campaign", 0, 4)
+	goMySQLOpenConns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 64)
+	goMySQLIdleConns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 64)
+	goMySQLMaxLifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 256)
+	goMySQLHttpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 4096)
+	campaign, _ := trial.SuggestInt("campaign", 0, 2)
 	if err := replaceEnv(EnvfileContext{
 		MaxOpenConns:        goMySQLOpenConns,
 		MaxIdleConns:        goMySQLIdleConns,
@@ -79,24 +79,16 @@ func objective(trial goptuna.Trial) (float64, error) {
 	nginxWorkerProcesses, _ := trial.SuggestInt("nginx_worker_processes", 1, 16)
 	nginxWorkerConns, _ := trial.SuggestInt("nginx_worker_connections", 1, 4096)
 	nginxKeepAliveTimeout, _ := trial.SuggestInt("nginx_keep_alive_timeout", 1, 100)
-	nginxOpenFileCacheMax, _ := trial.SuggestInt("nginx_open_file_cache_max", 100, 10000)
-	nginxOpenFileCacheInActive, _ := trial.SuggestInt("nginx_open_file_cache_inactive", 1, 64)
-	nginxGzip, _ := trial.SuggestCategorical("nginx_gzip", []string{"on", "off"})
 	if err := replaceNginxConf(NginxContext{
-		WorkerProcesses:       nginxWorkerProcesses,
-		WorkerConnections:     nginxWorkerConns,
-		KeepAliveTimeout:      nginxKeepAliveTimeout,
-		OpenFileCacheMax:      nginxOpenFileCacheMax,
-		OpenFileCacheInActive: nginxOpenFileCacheInActive,
-		Gzip:                  nginxGzip,
+		WorkerProcesses:   nginxWorkerProcesses,
+		WorkerConnections: nginxWorkerConns,
+		KeepAliveTimeout:  nginxKeepAliveTimeout,
 	}); err != nil {
 		return 0, err
 	}
 
 	// MySQL
-	innoDBBufferPoolSize, _ := trial.SuggestInt("innodb_buffer_pool_size", 10, 800)
-	innoDBLogBufferSize, _ := trial.SuggestInt("innodb_log_buffer_size", 1, 64)
-	innoDBLogFileSize, _ := trial.SuggestInt("innodb_log_file_size", 10, 1024)
+	innoDBBufferPoolSize, _ := trial.SuggestInt("innodb_buffer_pool_size", 10, 3800)
 	innoDBFlushLogAtTRXCommit, _ := trial.SuggestCategorical("innodb_flush_log_at_trx_commit", []string{"0", "1", "2"})
 	innodbFlushMethod, _ := trial.SuggestCategorical("innodb_flush_method", []string{
 		"fsync",
@@ -107,8 +99,6 @@ func objective(trial goptuna.Trial) (float64, error) {
 	})
 	if err := replaceMySQLConf(MySQLContext{
 		InnoDBBufferPoolSize:      innoDBBufferPoolSize,
-		InnoDBLogBufferSize:       innoDBLogBufferSize,
-		InnoDBLogFileSize:         innoDBLogFileSize,
 		InnoDBFlushLogAtTRXCommit: innoDBFlushLogAtTRXCommit,
 		InnodbFlushMethod:         innodbFlushMethod,
 	}); err != nil {
@@ -152,7 +142,7 @@ func main() {
 		log.Fatal("failed to create study:", err)
 	}
 
-	err = study.Optimize(objective, 250)
+	err = study.Optimize(objective, 200)
 	if err != nil {
 		log.Print("optimize catch error:", err)
 	}

@@ -113,8 +113,6 @@ max_binlog_size   = 100M
 # ssl-key=/etc/mysql/server-key.pem
 
 innodb_buffer_pool_size = {{.InnoDBBufferPoolSize}}M
-innodb_log_buffer_size = {{.InnoDBLogBufferSize}}M
-innodb_log_file_size = {{.InnoDBLogFileSize}}M
 innodb_flush_log_at_trx_commit = {{.InnoDBFlushLogAtTRXCommit}}
 innodb_flush_method = {{.InnodbFlushMethod}}
 `
@@ -127,8 +125,6 @@ var (
 
 type MySQLContext struct {
 	InnoDBBufferPoolSize      int    // default 128MB
-	InnoDBLogBufferSize       int    // default 8MB or 16MB
-	InnoDBLogFileSize         int    // default 48MB
 	InnoDBFlushLogAtTRXCommit string // default 1
 	InnodbFlushMethod         string // default fsync
 }
