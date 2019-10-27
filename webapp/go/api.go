@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/patrickmn/go-cache"
 )
 
 const (
@@ -145,10 +147,18 @@ func APIShipmentRequest(shipmentURL string, param *APIShipmentRequestReq) ([]byt
 		return nil, fmt.Errorf("status code: %d; body: %s", res.StatusCode, b)
 	}
 
+	shipmentStatusCache.Delete(param.ReserveID)
+
 	return ioutil.ReadAll(res.Body)
 }
 
-func APIShipmentStatus(shipmentURL string, param *APIShipmentStatusReq) (*APIShipmentStatusRes, error) {
+func APIShipmentStatus(shipmentURL string, param *APIShipmentStatusReq, useCache bool) (*APIShipmentStatusRes, error) {
+	if useCache {
+		ssrc, ok := shipmentStatusCache.Get(param.ReserveID)
+		if ok {
+			return ssrc.(*APIShipmentStatusRes), nil
+		}
+	}
 	b, _ := json.Marshal(param)
 
 	req, err := http.NewRequest(http.MethodGet, shipmentURL+"/status", bytes.NewBuffer(b))
@@ -178,6 +188,13 @@ func APIShipmentStatus(shipmentURL string, param *APIShipmentStatusReq) (*APIShi
 	err = json.NewDecoder(res.Body).Decode(&ssr)
 	if err != nil {
 		return nil, err
+	}
+
+	// shipping のときだけはshipment serviceでstatusが変化するためキャッシュしない
+	if ssr.Status == "shipping" {
+		shipmentStatusCache.Delete(param.ReserveID)
+	} else {
+		shipmentStatusCache.Set(param.ReserveID, ssr, cache.DefaultExpiration)
 	}
 
 	return ssr, nil

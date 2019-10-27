@@ -19,6 +19,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
+	"github.com/patrickmn/go-cache"
 	goji "goji.io"
 	"goji.io/pat"
 	"golang.org/x/crypto/bcrypt"
@@ -71,6 +72,10 @@ var (
 var (
 	userMap   = make(map[int64]*User)
 	userMapMu sync.RWMutex
+)
+
+var (
+	shipmentStatusCache = cache.New(time.Minute, 2*time.Minute)
 )
 
 type Config struct {
@@ -1117,7 +1122,7 @@ ORDER BY created_at DESC, items.id DESC LIMIT ?`,
 			go func() {
 				ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
 					ReserveID: reserveIDValue,
-				})
+				}, true)
 				if err != nil {
 					log.Print(err)
 					outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
@@ -1816,7 +1821,7 @@ func postShipDone(w http.ResponseWriter, r *http.Request) {
 
 	ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
 		ReserveID: shipping.ReserveID,
-	})
+	}, false)
 	if err != nil {
 		log.Print(err)
 		outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
@@ -1956,7 +1961,7 @@ func postComplete(w http.ResponseWriter, r *http.Request) {
 
 	ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
 		ReserveID: shipping.ReserveID,
-	})
+	}, false)
 	if err != nil {
 		log.Print(err)
 		outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
