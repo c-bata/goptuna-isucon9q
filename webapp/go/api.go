@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
+	"os"
+	"strconv"
+	"time"
 
 	"github.com/patrickmn/go-cache"
 )
@@ -15,6 +19,43 @@ const (
 
 	userAgent = "isucon9-qualify-webapp"
 )
+
+var apiHttpClient = http.DefaultClient
+
+func init() {
+	idleConns := 0
+	idleConnsPerHost := http.DefaultMaxIdleConnsPerHost
+	if v := os.Getenv("HTTP_MAX_IDLE_CONNS_PER_HOST"); v != "" {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		idleConns = c * 2
+		idleConnsPerHost = c
+	}
+	keepAlive := 0 * time.Second
+	if v := os.Getenv("HTTP_KEEP_ALIVE"); v != "" {
+		c, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		keepAlive = time.Duration(c) * time.Second
+	}
+	apiHttpClient = &http.Client{
+		Transport: &http.Transport{
+			Proxy: nil,
+			DialContext: (&net.Dialer{
+				Timeout:   20 * time.Second,
+				KeepAlive: keepAlive,
+			}).DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+			MaxIdleConns:        idleConns,
+			MaxIdleConnsPerHost: idleConnsPerHost,
+			IdleConnTimeout:     60 * time.Second,
+		},
+		Timeout: 10 * time.Second,
+	}
+}
 
 type APIPaymentServiceTokenReq struct {
 	ShopID string `json:"shop_id"`
@@ -63,7 +104,7 @@ func APIPaymentToken(paymentURL string, param *APIPaymentServiceTokenReq) (*APIP
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Content-Type", "application/json")
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := apiHttpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +139,7 @@ func APIShipmentCreate(shipmentURL string, param *APIShipmentCreateReq) (*APIShi
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", IsucariAPIToken)
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := apiHttpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +174,7 @@ func APIShipmentRequest(shipmentURL string, param *APIShipmentRequestReq) ([]byt
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", IsucariAPIToken)
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := apiHttpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +211,7 @@ func APIShipmentStatus(shipmentURL string, param *APIShipmentStatusReq, useCache
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", IsucariAPIToken)
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := apiHttpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

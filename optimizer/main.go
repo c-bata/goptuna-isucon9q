@@ -62,14 +62,16 @@ func objective(trial goptuna.Trial) (float64, error) {
 	// Go application
 	goMySQLOpenConns, _ := trial.SuggestInt("mysql_client_open_conns", 1, 64)
 	goMySQLIdleConns, _ := trial.SuggestInt("mysql_client_idle_conns", 1, 64)
-	goMySQLMaxLifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 256)
-	goMySQLHttpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 4096)
+	goMySQLMaxLifetime, _ := trial.SuggestInt("mysql_client_max_lifetime", 1, 128)
+	goHttpIdleConnsPerHost, _ := trial.SuggestInt("http_max_idle_conns_per_host", 1, 4096)
+	goHttpKeepAlive, _ := trial.SuggestInt("http_keep_alive_timeout", 1, 128)
 	campaign, _ := trial.SuggestInt("campaign", 0, 2)
 	if err := replaceEnv(EnvfileContext{
 		MaxOpenConns:        goMySQLOpenConns,
 		MaxIdleConns:        goMySQLIdleConns,
 		MaxLifetimeSeconds:  goMySQLMaxLifetime,
-		MaxIdleConnsPerHost: goMySQLHttpIdleConnsPerHost,
+		MaxIdleConnsPerHost: goHttpIdleConnsPerHost,
+		KeepAlive:           goHttpKeepAlive,
 		Campaign:            campaign,
 	}); err != nil {
 		return 0, err

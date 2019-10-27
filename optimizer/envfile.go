@@ -17,6 +17,7 @@ MYSQL_MAX_IDLE_CONNECTIONS={{.MaxIdleConns}}
 MYSQL_MAX_LIFETIME_SECONDS={{.MaxLifetimeSeconds}}
 
 HTTP_MAX_IDLE_CONNS_PER_HOST={{.MaxIdleConnsPerHost}}
+HTTP_KEEP_ALIVE = {{.KeepAlive}}
 ISUCARI_CAMPAIGN={{.Campaign}}
 `
 
@@ -31,6 +32,7 @@ type EnvfileContext struct {
 	MaxIdleConns        int
 	MaxLifetimeSeconds  int
 	MaxIdleConnsPerHost int
+	KeepAlive           int
 	Campaign            int
 }
 
