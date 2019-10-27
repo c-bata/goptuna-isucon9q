@@ -20,7 +20,7 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
-	goji "goji.io"
+	"goji.io"
 	"goji.io/pat"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -292,14 +292,6 @@ func init() {
 }
 
 func main() {
-	if v := os.Getenv("HTTP_MAX_IDLE_CONNS_PER_HOST"); v != "" {
-		c, err := strconv.Atoi(v)
-		if err != nil {
-			panic(err)
-		}
-		http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = c
-	}
-
 	if v := os.Getenv("ISUCARI_CAMPAIGN"); v != "" {
 		c, err := strconv.Atoi(v)
 		if err != nil {

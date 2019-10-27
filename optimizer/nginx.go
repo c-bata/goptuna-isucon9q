@@ -25,9 +25,9 @@ http {
     sendfile on;
     tcp_nopush on;
     tcp_nodelay on;
-    gzip {{.Gzip}};
+    gzip on;
     keepalive_timeout {{.KeepAliveTimeout}};
-    open_file_cache max={{.OpenFileCacheMax}} inactive={{.OpenFileCacheInActive}}s;
+    open_file_cache max=1000 inactive=20s;
 
     client_max_body_size 10m;
 
@@ -50,12 +50,9 @@ var (
 )
 
 type NginxContext struct {
-	WorkerProcesses       int
-	WorkerConnections     int
-	KeepAliveTimeout      int
-	OpenFileCacheMax      int
-	OpenFileCacheInActive int
-	Gzip                  string
+	WorkerProcesses   int
+	WorkerConnections int
+	KeepAliveTimeout  int
 }
 
 func replaceNginxConf(nginxCtx NginxContext) error {
